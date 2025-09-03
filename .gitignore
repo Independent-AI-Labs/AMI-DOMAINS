@@ -73,8 +73,6 @@ htmlcov/
 
 nul
 
-.claude
-
-# Reference code directories - not tracked
+.claude# Reference code directories - not tracked
 _reference_code/
 */_reference_code/
