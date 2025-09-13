@@ -215,7 +215,7 @@ DGRAPH_URL = "10.8.0.3:9080"  # Hardcoded IP
 - No `match/case` statements found
 - No type alias statements (`type X = ...`)
 - No new union syntax in incompatible contexts
-- Code should run on Python 3.11
+- Code should run on Python 3.12
 
 ---
 
