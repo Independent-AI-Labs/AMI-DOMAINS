@@ -5,6 +5,7 @@ target-version = "py311"
 exclude = [
     "_reference_code/",
     "*/_reference_code/",
+    "predict/**",
 ]
 
 [lint]
