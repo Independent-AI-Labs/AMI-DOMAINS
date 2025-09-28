@@ -1,0 +1,2 @@
+VendorName,SegmentCode,CompanyType,HQRegion,EmployeeBand,PrimaryOffering,WebsiteURL,SourceURL,SourceType,DateVerified,QueryUsed,Notes
+Google Vertex AI Agent Builder,hyperscalers,hyperscaler,na,10k_plus,Managed generative AI agent builder on Google Cloud with enterprise tooling,https://cloud.google.com/products/agent-builder,https://cloud.google.com/vertex-ai/generative-ai/docs/agent-builder/overview,html,2025-09-27,Vertex AI agent builder,Google Cloud documentation detailing Vertex AI Agent Builder; also surfaced in Lindy agent platforms list.
