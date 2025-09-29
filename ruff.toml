@@ -47,7 +47,7 @@ max-complexity = 10
 
 [lint.pylint]
 max-args = 16
-max-locals = 64
+# max-locals = 64  # Not supported in current ruff version
 max-statements = 96
 max-branches = 16
 

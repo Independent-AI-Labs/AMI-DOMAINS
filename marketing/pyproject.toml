@@ -1,0 +1,73 @@
+[project]
+name = "ami-marketing"
+version = "0.1.0"
+description = "Marketing domain research and validation tools for AMI orchestrator"
+readme = "README.md"
+requires-python = ">=3.12"
+authors = [ { name = "AMI Team" } ]
+
+dependencies = [
+  # HTTP and Web scraping
+  "requests>=2.31.0",
+  "beautifulsoup4>=4.12.0",
+  "cloudscraper>=1.2.71",  # For Cloudflare bypass
+
+  # Data processing
+  "pandas>=2.0.0",  # For CSV manipulation
+  "pydantic>=2.0.0",  # For data validation
+
+  # Async support (if needed)
+  "aiohttp>=3.8.0",
+  "asyncio>=3.4.3",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0.0",
+  "pytest-asyncio>=0.21.0",
+  "pytest-cov>=4.0.0",
+  "ruff>=0.1.0",
+  "mypy>=1.0.0",
+  "pre-commit>=3.0.0",
+]
+
+[project.scripts]
+# CLI commands for research
+validate-company = "marketing.scripts.validate_and_save:main"
+add-links = "marketing.scripts.add_link:main"
+download-file = "marketing.scripts.download_file:main"
+
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.uv]
+# Ensure the project is installed into the venv
+package = true
+
+# Developer dependencies
+dev-dependencies = [
+  "pytest>=8.0.0",
+  "pytest-asyncio>=0.21.0",
+  "pytest-cov>=4.0.0",
+  "ruff>=0.1.0",
+  "mypy>=1.0.0",
+  "pre-commit>=3.0.0",
+]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+select = ["E", "F", "W", "I", "N"]
+ignore = ["E501"]  # Line too long - handled by formatter
+
+[tool.mypy]
+python_version = "3.12"
+warn_unused_ignores = true
+warn_redundant_casts = true
+warn_return_any = true
+ignore_missing_imports = true
+
+[tool.setuptools.packages.find]
+include = ["marketing*"]
+where = ["."]
