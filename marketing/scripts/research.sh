@@ -3,7 +3,27 @@
 # NO file reading, NO writing, NO web access, NO editing
 # ONLY execute validation scripts through Bash
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+
+MCP_CONFIG_FILE="$(mktemp)"
+trap 'rm -f "$MCP_CONFIG_FILE"' EXIT
+
+cat >"$MCP_CONFIG_FILE" <<JSON
+{
+  "mcpServers": {
+    "browser": {
+      "command": "python3",
+      "args": [
+        "${REPO_ROOT}/browser/scripts/run_chrome.py"
+      ]
+    }
+  }
+}
+JSON
+
 claude --dangerously-skip-permissions \
+  --mcp-config "$MCP_CONFIG_FILE" \
   --disallowed-tools \
     Read \
     Write \
