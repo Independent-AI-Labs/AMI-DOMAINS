@@ -31,6 +31,8 @@ def load_script(name: str) -> ModuleType:
 validate_module = load_script("validate_and_save")
 link_module = load_script("add_link")
 download_module = load_script("download_file")
+schema_module = load_script("propose_schema")
+audit_module = load_script("add_audit_note")
 
 
 @pytest.fixture()
@@ -132,3 +134,40 @@ def test_download_manager_dry_run(tmp_paths: validate_module.ModulePaths, monkey
 
     assert outcome.results[0]["success"] is True
     assert outcome.results[0]["output_path"]
+
+
+def test_propose_schema_validation(tmp_paths: validate_module.ModulePaths) -> None:
+    schema_paths = schema_module.ModulePaths(SCRIPTS_DIR / "propose_schema.py", research_root=tmp_paths.base)
+    options = schema_module.SchemaOptions(name="test", dry_run=True, force=False, manifest_path=None)
+    validator = schema_module.SchemaValidator(options, schema_paths, schema_module.StructuredLogger(schema_paths, "propose_schema", subdir=None))
+
+    schema_payload = {
+        "title": "Example",
+        "type": "object",
+        "properties": {
+            "vendor_name": {"type": "string"},
+            "website_url": {"type": "string", "format": "uri"},
+        },
+        "required": ["vendor_name", "website_url"],
+        "additionalProperties": False,
+    }
+
+    result = validator.validate(schema_payload)
+    assert not result.errors
+
+
+def test_add_audit_note_wrap(tmp_paths: validate_module.ModulePaths) -> None:
+    audit_paths = audit_module.ModulePaths(SCRIPTS_DIR / "add_audit_note.py", research_root=tmp_paths.base)
+    audit_file = audit_module.resolve_audit_path(audit_paths)
+
+    entry_text = "Update pipeline to include weekly market reviews."
+    entry = audit_module.wrap_entry(entry_text, title="Weekly Update")
+    assert "Weekly Update" in entry
+
+    with audit_file.open("w", encoding="utf-8") as handle:
+        handle.write("")
+    with audit_file.open("a", encoding="utf-8") as handle:
+        handle.write(entry)
+
+    contents = audit_file.read_text(encoding="utf-8")
+    assert "Weekly Update" in contents
