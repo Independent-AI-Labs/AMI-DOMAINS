@@ -1,203 +1,325 @@
 #!/usr/bin/env python3
-"""
-Validates and saves links that Claude provides after browsing.
-Claude finds links, this script validates they're real.
+"""Validate, dedupe, and persist marketing research links with logging.
 
-Usage:
-    # Claude found some links and provides them:
-    cat << EOF | python add_link.py --subdir drug_discovery
+Quickstart
+----------
+    cat <<'EOF' | python add_link.py --subdir drug_discovery --requests-per-minute 30 --dry-run
     https://atomwise.com
     https://benevolent.ai
-    https://recursion.com
     EOF
 
-    # Or as CSV:
-    cat << EOF | python add_link.py --subdir fintech --format csv
-    url,company_name,source
-    https://upstart.com,Upstart,https://github.com/awesome-fintech
-    https://zest.ai,Zest AI,https://techcrunch.com/ai-fintech
-    EOF
+Agent playbook
+--------------
+1. Pipe either plain URLs or CSV rows into stdin (set ``--format csv`` when needed).
+2. Begin with ``--dry-run`` to review duplicates and HTTP status codes.
+3. Tune ``--max-retries`` / ``--timeout`` / ``--requests-per-minute`` for unstable hosts.
+4. Apply ``--force`` only when you intentionally keep duplicates or soft failures.
+5. Inspect ``logs/<subdir>/latest.log.json`` plus ``*_result.json`` for machine cues.
 """
+
+from __future__ import annotations
 
 import argparse
 import csv
 import hashlib
+import io
 import json
+import os
 import sys
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
+from typing import Any, Mapping, MutableMapping, Sequence, cast
 
-import requests
+from utils import (
+    DEFAULT_ALLOWED_STATUS,
+    ModulePaths,
+    RateLimiter,
+    StructuredLogger,
+    build_retry_session,
+    ensure_runtime,
+    hint_for_error,
+    load_schema_config,
+)
+
+ensure_runtime(Path(__file__))
+
+Row = MutableMapping[str, Any]
 
 
-class LinkValidator:
-    def __init__(self, base_dir="research/landscape/ai/leads"):
-        self.base_dir = Path(base_dir)
+@dataclass(slots=True)
+class LinkOptions:
+    subdir: str
+    format: str
+    dry_run: bool
+    force: bool
+    manifest_path: Path | None
+    max_retries: int
+    timeout: float
+    backoff_factor: float
+    requests_per_minute: float | None
 
-    def verify_url(self, url):
-        """Verify URL actually exists - prevent Claude hallucination"""
-        try:
-            response = requests.head(url, timeout=10, allow_redirects=True,
-                                    headers={'User-Agent': 'Mozilla/5.0'})
-            return {
-                "url": url,
-                "valid": response.status_code in [200, 201, 301, 302],
-                "status_code": response.status_code,
-                "final_url": response.url,
-                "verified_at": datetime.now().isoformat()
-            }
-        except Exception as e:
-            return {
-                "url": url,
-                "valid": False,
-                "error": str(e)[:200],
-                "verified_at": datetime.now().isoformat()
-            }
 
-    def save_links(self, links, subdir):
-        """Save validated links to CSV"""
-        links_dir = self.base_dir / "links-and-sources" / "validated" / subdir
-        links_dir.mkdir(parents=True, exist_ok=True)
+@dataclass
+class LinkOutcome:
+    verified: list[Row] = field(default_factory=list)
+    rejected: list[Row] = field(default_factory=list)
+    duplicates: list[str] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list)
 
-        verified_file = links_dir / "verified_links.csv"
-        rejected_file = links_dir / "rejected_links.csv"
 
-        # Check for duplicates
-        existing_urls = set()
-        if verified_file.exists():
-            with open(verified_file, 'r') as f:
-                reader = csv.DictReader(f)
-                existing_urls = {row['url'] for row in reader}
+class LinkProcessor:
+    """Handle link verification, dedupe, and persistence."""
 
-        verified = []
-        rejected = []
+    def __init__(self, paths: ModulePaths, options: LinkOptions, logger: StructuredLogger) -> None:
+        self.paths = paths
+        self.options = options
+        self.logger = logger
+        self.config = load_schema_config(paths, "link")
 
-        for link_data in links:
-            url = link_data.get('url')
+        allowed = self.config.get("url_checks", {}).get("allowed_status")
+        self.allowed_status = set(int(code) for code in (allowed or DEFAULT_ALLOWED_STATUS))
 
-            # Skip duplicates
-            if url in existing_urls:
-                print(f"[SKIP] {url} - already exists")
+        retry_cfg = self.config.get("retry", {})
+        status_forcelist = retry_cfg.get("status_forcelist")
+        self.session = build_retry_session(
+            max_retries=retry_cfg.get("max_retries", options.max_retries),
+            backoff_factor=retry_cfg.get("backoff_factor", options.backoff_factor),
+            timeout=options.timeout,
+            allowed_methods=["GET", "HEAD"],
+            status_forcelist=status_forcelist,
+        )
+        self.method = str(self.config.get("url_checks", {}).get("method", "HEAD")).upper()
+        self.headers = dict(self.config.get("url_checks", {}).get("headers", {"User-Agent": "Mozilla/5.0"}))
+        self.rate_limiter = RateLimiter(options.requests_per_minute)
+
+        self.base_dir = self.paths.links(options.subdir)
+        self.verified_file = self.base_dir / "verified_links.csv"
+        self.rejected_file = self.base_dir / "rejected_links.csv"
+
+    def process(self, rows: Sequence[Row]) -> LinkOutcome:
+        outcome = LinkOutcome()
+        existing_urls = self._load_existing_urls()
+
+        for row in rows:
+            url = str(row.get("url", "")).strip()
+            if not url:
+                self.logger.log("WARN", "Skipping row without URL", level="WARN", details={"row": dict(row)})
                 continue
 
-            # Verify URL
-            print(f"[VERIFY] {url}")
-            result = self.verify_url(url)
+            if url in existing_urls:
+                outcome.duplicates.append(url)
+                self.logger.log("WARN", f"Duplicate URL detected: {url}")
+                if not self.options.force:
+                    continue
 
-            if result['valid']:
-                print(f"  ✓ Valid ({result['status_code']})")
-                verified_entry = {
-                    'url': url,
-                    'final_url': result.get('final_url', url),
-                    'status_code': result['status_code'],
-                    'company_name': link_data.get('company_name', ''),
-                    'source': link_data.get('source', ''),
-                    'verified_at': result['verified_at'],
-                    'url_hash': hashlib.md5(url.encode()).hexdigest()[:8]
-                }
-                verified.append(verified_entry)
+            result = self._verify_url(row)
+            if result.get("success"):
+                self.logger.log("OK", f"Verified {url}", details={"status": result.get("status_code")})
+                outcome.verified.append(result)
+                existing_urls.add(url)
             else:
-                print(f"  ✗ Invalid: {result.get('error', 'Failed')}")
-                rejected.append({
-                    'url': url,
-                    'error': result.get('error', 'Verification failed'),
-                    'attempted_at': result['verified_at']
-                })
+                error_msg = result.get("error", "Verification failed")
+                hint = hint_for_error(error_msg)
+                details = {"status": result.get("status_code"), "hint": hint} if hint else {"status": result.get("status_code")}
+                self.logger.log("ERROR", f"Failed to verify {url}: {error_msg}", level="ERROR", details=details)
+                outcome.rejected.append(result)
+                outcome.errors.append(error_msg)
 
-        # Write verified links
-        if verified:
-            file_exists = verified_file.exists()
-            with open(verified_file, 'a', newline='') as f:
-                fieldnames = ['url', 'final_url', 'status_code', 'company_name',
-                            'source', 'verified_at', 'url_hash']
-                writer = csv.DictWriter(f, fieldnames=fieldnames)
+        return outcome
+
+    def persist(self, outcome: LinkOutcome) -> None:
+        if self.options.dry_run:
+            self.logger.log("DRY_RUN", "Dry-run mode active; no CSV files written")
+            return
+
+        if outcome.verified:
+            file_exists = self.verified_file.exists()
+            with self.verified_file.open("a", newline="", encoding="utf-8") as handle:
+                fieldnames = [
+                    "url",
+                    "final_url",
+                    "status_code",
+                    "company_name",
+                    "source",
+                    "verified_at",
+                    "url_hash",
+                ]
+                writer = csv.DictWriter(handle, fieldnames=fieldnames)
                 if not file_exists:
                     writer.writeheader()
-                writer.writerows(verified)
+                writer.writerows(outcome.verified)
 
-        # Write rejected links
-        if rejected:
-            file_exists = rejected_file.exists()
-            with open(rejected_file, 'a', newline='') as f:
-                fieldnames = ['url', 'error', 'attempted_at']
-                writer = csv.DictWriter(f, fieldnames=fieldnames)
+        if outcome.rejected:
+            file_exists = self.rejected_file.exists()
+            with self.rejected_file.open("a", newline="", encoding="utf-8") as handle:
+                fieldnames = ["url", "error", "status_code", "attempted_at"]
+                writer = csv.DictWriter(handle, fieldnames=fieldnames)
                 if not file_exists:
                     writer.writeheader()
-                writer.writerows(rejected)
+                writer.writerows(outcome.rejected)
 
-        return len(verified), len(rejected)
+    def _load_existing_urls(self) -> set[str]:
+        urls: set[str] = set()
+        if self.verified_file.exists():
+            with self.verified_file.open("r", encoding="utf-8") as handle:
+                reader = csv.DictReader(handle)
+                urls = {row["url"] for row in reader if row.get("url")}
+        return urls
 
-    def log_action(self, subdir, total, verified, rejected):
-        """Create audit log"""
-        log_dir = self.base_dir / "logs" / subdir
-        log_dir.mkdir(parents=True, exist_ok=True)
+    def _verify_url(self, row: Row) -> Row:
+        import requests  # type: ignore[import-untyped]
 
-        log_file = log_dir / f"links_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
-        log_entry = {
-            "timestamp": datetime.now().isoformat(),
-            "action": "add_links",
-            "subdir": subdir,
-            "total_provided": total,
-            "verified": verified,
-            "rejected": rejected
+        url = str(row.get("url", "")).strip()
+        self.rate_limiter.wait()
+        result: Row = {
+            "url": url,
+            "company_name": row.get("company_name", ""),
+            "source": row.get("source", ""),
+            "final_url": url,
+            "status_code": None,
+            "verified_at": datetime.now().isoformat(),
+            "url_hash": None,
+            "error": None,
+            "success": False,
         }
+        try:
+            response = self.session.request(self.method, url, headers=self.headers, allow_redirects=True)
+            status_code = response.status_code
+            result["status_code"] = status_code
+            if status_code not in self.allowed_status and self.method != "GET":
+                response = self.session.request("GET", url, headers=self.headers, allow_redirects=True)
+                status_code = response.status_code
+                result["status_code"] = status_code
+            if status_code in self.allowed_status:
+                result["success"] = True
+                result["final_url"] = getattr(response, "url", url)
+                result["url_hash"] = self._hash_url(url)
+            else:
+                result["error"] = f"HTTP {status_code}"
+        except requests.RequestException as error:
+            result["error"] = str(error)[:200]
+        return result
 
-        with open(log_file, 'w') as f:
-            json.dump(log_entry, f, indent=2)
+    @staticmethod
+    def _hash_url(url: str) -> str:
+        return hashlib.md5(url.encode()).hexdigest()[:8]
 
-        return log_file
 
-def main():
-    parser = argparse.ArgumentParser(description='Validate and save links')
-    parser.add_argument('--subdir', required=True, help='Subdirectory for organization')
-    parser.add_argument('--format', choices=['plain', 'csv'], default='plain')
+def parse_rows(raw: str, fmt: str) -> list[Row]:
+    if not raw.strip():
+        raise ValueError("No links provided via stdin")
+
+    rows: list[Row] = []
+    if fmt == "csv":
+        reader = csv.DictReader(io.StringIO(raw))
+        for row in reader:
+            if not row.get("url"):
+                continue
+            rows.append(cast(Row, row))
+    else:
+        for line in raw.splitlines():
+            line = line.strip()
+            if line and line.startswith("http"):
+                rows.append(cast(Row, {"url": line}))
+    if not rows:
+        raise ValueError("No valid links found in input")
+    return rows
+
+
+def build_arg_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Validate and persist marketing research links")
+    parser.add_argument("--subdir", required=True, help="Research subdirectory for outputs")
+    parser.add_argument("--format", choices=["plain", "csv"], default="plain", help="Input format")
+    parser.add_argument("--dry-run", action="store_true", help="Show actions without writing files")
+    parser.add_argument("--force", action="store_true", help="Override duplicate warnings or soft failures")
+    parser.add_argument("--manifest", type=Path, help="Optional path for the result manifest JSON")
+    parser.add_argument("--max-retries", type=int, default=3, help="HTTP retry attempts for link verification")
+    parser.add_argument("--timeout", type=float, default=10.0, help="Request timeout for verification calls")
+    parser.add_argument("--backoff-factor", type=float, default=0.5, help="Retry backoff factor for verification calls")
+    parser.add_argument(
+        "--requests-per-minute",
+        type=float,
+        help="Throttle outbound verification requests to this many per minute",
+    )
+    return parser
+
+
+def write_manifest(
+    logger: StructuredLogger,
+    summary: Mapping[str, Any],
+    override_path: Path | None,
+) -> Path:
+    manifest_path = logger.flush_summary(summary)
+    if override_path:
+        with override_path.open("w", encoding="utf-8") as handle:
+            json.dump({**summary, "generated_at": datetime.now().isoformat()}, handle, indent=2)
+        return override_path
+    return manifest_path
+
+
+def main() -> None:
+    parser = build_arg_parser()
     args = parser.parse_args()
 
-    # Read input from Claude
-    input_data = sys.stdin.read().strip()
+    options = LinkOptions(
+        subdir=args.subdir,
+        format=args.format,
+        dry_run=args.dry_run,
+        force=args.force,
+        manifest_path=args.manifest,
+        max_retries=args.max_retries,
+        timeout=args.timeout,
+        backoff_factor=args.backoff_factor,
+        requests_per_minute=args.requests_per_minute,
+    )
 
-    if not input_data:
-        print("[ERROR] No links provided via stdin")
-        sys.exit(1)
+    paths = ModulePaths(Path(__file__))
+    logger = StructuredLogger(paths, "add_link", subdir=args.subdir)
 
-    links = []
+    raw_input = sys.stdin.read().strip()
+    try:
+        rows = parse_rows(raw_input, options.format)
+    except ValueError as error:
+        logger.log("ERROR", str(error), level="ERROR")
+        summary = {
+            "status": "failed",
+            "errors": [str(error)],
+            "warnings": [],
+            "dry_run": options.dry_run,
+        }
+        manifest = write_manifest(logger, summary, options.manifest_path)
+        logger.log("RESULT", f"Link ingestion aborted (manifest: {manifest})", level="ERROR")
+        raise SystemExit(1)
 
-    if args.format == 'csv':
-        # Parse CSV input
-        import io
-        reader = csv.DictReader(io.StringIO(input_data))
-        for row in reader:
-            links.append(row)
-    else:
-        # Parse plain text (one URL per line)
-        for line in input_data.split('\n'):
-            line = line.strip()
-            if line and line.startswith('http'):
-                links.append({'url': line})
+    logger.log("START", f"Processing {len(rows)} link(s) for {options.subdir}")
 
-    if not links:
-        print("[ERROR] No valid links found in input")
-        sys.exit(1)
+    processor = LinkProcessor(paths, options, logger)
+    outcome = processor.process(rows)
+    processor.persist(outcome)
 
-    print(f"[PROCESSING] {len(links)} links for {args.subdir}")
+    summary = {
+        "status": "success" if outcome.verified or options.force else "partial",
+        "verified": len(outcome.verified),
+        "rejected": len(outcome.rejected),
+        "duplicates": outcome.duplicates,
+        "dry_run": options.dry_run,
+    }
+    if outcome.rejected and not options.force:
+        summary["status"] = "needs_attention"
+    if outcome.errors:
+        summary["errors"] = outcome.errors
 
-    validator = LinkValidator()
-    verified_count, rejected_count = validator.save_links(links, args.subdir)
+    manifest = write_manifest(logger, summary, options.manifest_path)
+    logger.log(
+        "RESULT",
+        f"Processed {len(rows)} link(s); verified {len(outcome.verified)}, rejected {len(outcome.rejected)}",
+    )
+    logger.log("MANIFEST", f"Result manifest: {manifest}")
 
-    # Log action
-    log_file = validator.log_action(args.subdir, len(links), verified_count, rejected_count)
+    if not outcome.verified and not options.force:
+        raise SystemExit(1)
 
-    # Summary
-    print("\n[SUMMARY]")
-    print(f"  Provided: {len(links)}")
-    print(f"  Verified: {verified_count}")
-    print(f"  Rejected: {rejected_count}")
-    print(f"  Saved to: {validator.base_dir / 'links' / args.subdir}")
-    print(f"  Log: {log_file}")
 
-    # Exit with error if all rejected
-    if verified_count == 0 and len(links) > 0:
-        sys.exit(1)
-
-if __name__ == "__main__":
+if __name__ == "__main__" and not os.environ.get("AMI_MARKETING_SKIP_MAIN"):  # pragma: no cover
     main()

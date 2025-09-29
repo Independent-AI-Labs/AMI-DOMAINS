@@ -1,0 +1,134 @@
+from __future__ import annotations
+
+import importlib.util
+import os
+import shutil
+import sys
+from pathlib import Path
+from types import ModuleType
+
+import pytest
+
+ROOT = Path(__file__).resolve().parents[1]
+SCRIPTS_DIR = ROOT / "scripts"
+SCHEMA_SOURCE_DIR = ROOT / "research" / "landscape" / "ai" / "leads" / "requirements-and-schemas" / "schemas"
+
+if str(SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS_DIR))
+
+os.environ.setdefault("AMI_MARKETING_SKIP_MAIN", "1")
+
+
+def load_script(name: str) -> ModuleType:
+    module_path = SCRIPTS_DIR / f"{name}.py"
+    spec = importlib.util.spec_from_file_location(f"marketing_{name}", module_path)
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(module)  # type: ignore[assignment]
+    return module
+
+
+validate_module = load_script("validate_and_save")
+link_module = load_script("add_link")
+download_module = load_script("download_file")
+
+
+@pytest.fixture()
+def tmp_paths(tmp_path: Path) -> validate_module.ModulePaths:
+    research_root = tmp_path / "research"
+    schema_dir = research_root / "requirements-and-schemas" / "schemas"
+    schema_dir.mkdir(parents=True, exist_ok=True)
+    for schema_file in SCHEMA_SOURCE_DIR.glob("*.yaml"):
+        shutil.copy(schema_file, schema_dir / schema_file.name)
+    return validate_module.ModulePaths(SCRIPTS_DIR / "validate_and_save.py", research_root=research_root)
+
+
+def test_validate_dry_run_success(tmp_paths: validate_module.ModulePaths, monkeypatch: pytest.MonkeyPatch) -> None:
+    logger = validate_module.StructuredLogger(tmp_paths, "validate_and_save", subdir="tests")
+    options = validate_module.ValidationOptions(
+        data_type="company",
+        subdir="tests",
+        force=False,
+        dry_run=True,
+        manifest_path=None,
+        max_retries=1,
+        timeout=0.5,
+        backoff_factor=0.1,
+        requests_per_minute=None,
+    )
+    validator = validate_module.Validator(tmp_paths, options, logger)
+    monkeypatch.setattr(validator, "_verify_url", lambda url: True)
+
+    data = {"vendor_name": "TestCo", "website_url": "https://example.com"}
+    outcome = validator.validate(data)
+
+    assert not outcome.errors
+    assert not outcome.warnings
+
+
+def test_link_processor_parses_and_logs(tmp_paths: validate_module.ModulePaths, monkeypatch: pytest.MonkeyPatch) -> None:
+    link_paths = link_module.ModulePaths(SCRIPTS_DIR / "add_link.py", research_root=tmp_paths.base)
+    logger = link_module.StructuredLogger(link_paths, "add_link", subdir="tests")
+    options = link_module.LinkOptions(
+        subdir="tests",
+        format="plain",
+        dry_run=True,
+        force=False,
+        manifest_path=None,
+        max_retries=1,
+        timeout=0.5,
+        backoff_factor=0.1,
+        requests_per_minute=None,
+    )
+    processor = link_module.LinkProcessor(link_paths, options, logger)
+    monkeypatch.setattr(processor, "_verify_url", lambda row: {
+        "url": row["url"],
+        "company_name": row.get("company_name", ""),
+        "source": row.get("source", ""),
+        "final_url": row["url"],
+        "status_code": 200,
+        "verified_at": "now",
+        "url_hash": "abc123",
+        "error": None,
+        "success": True,
+    })
+
+    rows = link_module.parse_rows("https://example.com", "plain")
+    outcome = processor.process(rows)
+
+    assert outcome.verified and not outcome.rejected
+
+
+class _FakeResponse:
+    def __init__(self, url: str, status_code: int = 200, content: bytes = b"data") -> None:
+        self.url = url
+        self.status_code = status_code
+        self._content = content
+        self.headers = {"content-length": str(len(content))}
+
+    def iter_content(self, chunk_size: int = 8192):
+        yield self._content
+
+
+def test_download_manager_dry_run(tmp_paths: validate_module.ModulePaths, monkeypatch: pytest.MonkeyPatch) -> None:
+    download_paths = download_module.ModulePaths(SCRIPTS_DIR / "download_file.py", research_root=tmp_paths.base)
+    logger = download_module.StructuredLogger(download_paths, "download_file", subdir="tests")
+    options = download_module.DownloadOptions(
+        urls=["https://example.com/data.csv"],
+        output=None,
+        subdir="tests",
+        dry_run=True,
+        force=False,
+        manifest_path=None,
+        max_retries=1,
+        timeout=1.0,
+        backoff_factor=0.1,
+        requests_per_minute=None,
+    )
+    manager = download_module.DownloadManager(download_paths, options, logger)
+    monkeypatch.setattr(manager, "_make_request", lambda url: _FakeResponse(url))
+
+    outcome = manager.download_all()
+
+    assert outcome.results[0]["success"] is True
+    assert outcome.results[0]["output_path"]
