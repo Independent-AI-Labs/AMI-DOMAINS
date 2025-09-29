@@ -2,7 +2,7 @@
 
 ## Directory Layout
 ```
-research/landscape/ai/leads/
+research/ai-enablers/
 ├── requirements-and-schemas/
 │   ├── requirements/                 # Immutable baseline requirements plus audit trail
 │   └── schemas/                      # Active validation schemas (.yaml + .schema.json)
@@ -27,7 +27,7 @@ Every script boots the marketing virtual environment automatically, prints human
 
 ## Recommended Workflow
 
-1. **Understand requirements** – review `requirements-and-schemas/requirements/initial-requirements.md`. Add contextual notes with `scripts/add_audit_note.py` so future runs know why decisions were made.
+1. **Understand requirements** – review `research/ai-enablers/requirements-and-schemas/requirements/initial-requirements.md`. Add contextual notes with `scripts/add_audit_note.py` so future runs know why decisions were made.
 2. **Draft or extend schemas** – iterate locally with `scripts/propose_schema.py --name <schema> --dry-run`. Re-run with `--force` once warnings are resolved and you are ready to persist `*.schema.json`.
 3. **Collect candidate links** – capture URLs or CSV rows and run `scripts/add_link.py --subdir <focus-area> --dry-run` to see verification outcomes. Drop the `--dry-run` flag to append to `links-and-sources/validated/<subdir>/`.
 4. **Validate structured company data** – paste JSON (or colon-delimited pairs) into `scripts/validate_and_save.py`. Review the structured log at `logs/<subdir>/latest.log.json`, address warnings, and rerun with `--force` only when you intentionally override soft gates.
@@ -91,7 +91,7 @@ EOF
 - Result manifests (e.g., `validate_and_save_result.json`) record success/failure, warning details, and output paths for orchestration.
 
 ## Validation Highlights
-- Schemas are authored in YAML (`schemas/*.yaml`) and compiled to JSON for compatibility (`*.schema.json`).
+    - Schemas are authored in YAML (`research/ai-enablers/requirements-and-schemas/schemas/*.yaml`) and compiled to JSON for compatibility (`*.schema.json`).
 - URL checks use a configurable HEAD/GET strategy with retries and rate limiting.
 - Duplicate detection looks at `vendor_name` and `website_url` within the chosen subdirectory.
 - Warnings (missing recommended fields, non-standard formats) block the run unless `--force` is provided, ensuring conscious overrides.

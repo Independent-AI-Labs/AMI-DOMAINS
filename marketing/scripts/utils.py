@@ -62,7 +62,7 @@ class ModulePaths:
         if self.research_root is None:
             # scripts/<name>.py -> module root -> research tree
             module_root = self.script_path.resolve().parent.parent
-            self.research_root = module_root / "research" / "landscape" / "ai" / "leads"
+            self.research_root = module_root / "research" / "ai-enablers"
 
     @property
     def base(self) -> Path:

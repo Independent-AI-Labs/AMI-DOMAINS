@@ -11,7 +11,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS_DIR = ROOT / "scripts"
-SCHEMA_SOURCE_DIR = ROOT / "research" / "landscape" / "ai" / "leads" / "requirements-and-schemas" / "schemas"
+SCHEMA_SOURCE_DIR = ROOT / "research" / "ai-enablers" / "requirements-and-schemas" / "schemas"
 
 if str(SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_DIR))
@@ -37,7 +37,7 @@ audit_module = load_script("add_audit_note")
 
 @pytest.fixture()
 def tmp_paths(tmp_path: Path) -> validate_module.ModulePaths:
-    research_root = tmp_path / "research"
+    research_root = tmp_path / "research" / "ai-enablers"
     schema_dir = research_root / "requirements-and-schemas" / "schemas"
     schema_dir.mkdir(parents=True, exist_ok=True)
     for schema_file in SCHEMA_SOURCE_DIR.glob("*.yaml"):
