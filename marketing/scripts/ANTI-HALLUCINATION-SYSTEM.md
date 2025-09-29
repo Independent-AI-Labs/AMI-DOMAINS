@@ -1,6 +1,6 @@
 # Anti-Hallucination Safeguards
 
-The marketing research stack prevents fabricated data by forcing everything through scripted checkpoints. Instead of a loose pipeline, we now operate a set of focused tools that each guarantee a slice of the validation story.
+The marketing research stack prevents fabricated data by forcing everything through scripted checkpoints. Instead of a loose pipeline, we now operate a set of focused tools that each guarantee a slice of the validation story. **All upstream content must originate from the Browser MCP tool—it is the only trusted source.**
 
 ## Guardrail Overview
 | Risk | Mitigation |

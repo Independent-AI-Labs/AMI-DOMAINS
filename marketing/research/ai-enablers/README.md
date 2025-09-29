@@ -14,6 +14,8 @@ research/ai-enablers/
 └── logs/<subdir>/                    # JSONL event streams + result manifests per script run
 ```
 
+> **Trust boundary:** All factual research must come through the Browser MCP tool. It is the only trusted source of content—do not rely on memory, prior exports, or any other channel.
+
 ## Core Scripts
 | Script | Purpose | Typical First Step |
 | --- | --- | --- |

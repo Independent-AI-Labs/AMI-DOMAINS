@@ -1,6 +1,6 @@
 # Research Methodology – Operational Playbook
 
-The marketing toolkit enforces a scripted workflow so every data point is verified, logged, and reproducible. Follow the stages below—manual edits to datasets are not supported.
+The marketing toolkit enforces a scripted workflow so every data point is verified, logged, and reproducible. Follow the stages below—manual edits to datasets are not supported. **Only the Browser MCP tool is trusted for collecting content; all research must originate there.**
 
 ## Stage 0 · Requirements & Schema Stewardship
 1. Review the baseline requirements in `research/ai-enablers/requirements-and-schemas/requirements/initial-requirements.md`.
