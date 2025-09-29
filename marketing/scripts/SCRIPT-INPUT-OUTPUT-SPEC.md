@@ -1,246 +1,71 @@
-# Script Input/Output Specifications
+# Script Input / Output Reference
 
-## 1. `add_company.py` - MAIN ENTRY POINT
+All scripts run from `domains/marketing/scripts/`, bootstrap the local venv automatically, print human-readable status lines, and emit JSONL logs plus optional manifests underneath `research/landscape/ai/leads/logs/`.
 
-### INPUT (from Claude via stdin or args)
-```
-# Claude provides whatever format:
-Atomwise
-https://atomwise.com
-I found this on https://github.com/awesome-ai
-It does drug discovery with AI
-```
+## `validate_and_save.py`
+- **Purpose**: Validate structured company data and persist it to `data-models/validated/<subdir>/`.
+- **Input**: JSON or `key: value` pairs via stdin.
+- **Key flags**:
+  - `--subdir <name>` *(required)* – taxonomy folder.
+  - `--type <schema>` – schema name (default `company`).
+  - `--dry-run` – run validation without writing files.
+  - `--force` – override warnings/duplicate detections.
+  - `--manifest <path>` – custom manifest destination.
+  - `--max-retries`, `--timeout`, `--requests-per-minute` – URL verification controls.
+- **Output**:
+  - On success: `[OK] Saved model to …` and manifest `validate_and_save_result.json`.
+  - On failure: `[ERROR] …` lines per violation; exit code `1`.
+  - Structured log events written to `logs/<subdir>/validate_and_save_*.log.jsonl` and `latest.log.json`.
 
-### WHAT IT DOES
-1. **PARSES** Claude's messy input into structured format
-2. **CALLS** other scripts in sequence to verify
-3. **BLOCKS** if any verification fails
-4. **WRITES** to CSV only if ALL checks pass
+## `add_link.py`
+- **Purpose**: Verify URLs and update the link registry.
+- **Input**: Plain URLs (one per line) or CSV via stdin.
+- **Key flags**:
+  - `--subdir <name>` *(required)*.
+  - `--format plain|csv` (default `plain`).
+  - `--dry-run`, `--force`, `--manifest`, retry/timeout/rate-limit flags.
+- **Output**:
+  - Appends to `links-and-sources/validated/<subdir>/verified_links.csv` and `rejected_links.csv` (unless `--dry-run`).
+  - Summary plus manifest `add_link_result.json`.
+  - Logs to `logs/<subdir>/add_link_*.log.jsonl` and `latest.log.json`.
 
-### OUTPUT
-```
-[PARSING] Your input...
-[CHECK 1] Verifying URL exists...
-[CHECK 2] Verifying source contains company...
-[CHECK 3] Extracting real data from website...
-[RESULT] ✓ Company added to vertical_industry_platforms.csv
--- OR --
-[RESULT] ✗ REJECTED: URL returns 404
-```
+## `download_file.py`
+- **Purpose**: Fetch supporting artefacts with stealth headers / Cloudscraper fallback.
+- **Input**: `--url` argument and/or URLs piped via stdin.
+- **Key flags**:
+  - `--subdir` to group downloads under `downloads/<subdir>/`.
+  - `--output` for an explicit file path.
+  - `--dry-run`, `--force`, `--manifest`, retry/timeout/rate-limit flags.
+- **Output**:
+  - Saves file(s) or reports errors per URL.
+  - Manifest summarising counts and output paths.
+  - Logs under `logs/<subdir or general>/`.
 
----
+## `propose_schema.py`
+- **Purpose**: Validate JSON schema drafts against modelling guardrails and optionally persist them as `schemas/<name>.schema.json`.
+- **Input**: JSON schema via stdin.
+- **Key flags**:
+  - `--name <schema>` *(required)* – file stem.
+  - `--dry-run`, `--force`, `--manifest`.
+- **Output**:
+  - Logs warnings/errors for missing fields, invalid formats, etc.
+  - Writes schema file unless `--dry-run`.
+  - Logs go to `logs/` (no subdir).
 
-## 2. `verify_url.py` - URL EXISTENCE CHECK
+## `add_audit_note.py`
+- **Purpose**: Append Markdown notes to `requirements-and-schemas/requirements/audit-trail.md`.
+- **Input**: Markdown body via stdin.
+- **Key flags**:
+  - `--title` for the entry heading.
+  - `--dry-run`, `--manifest`.
+- **Output**:
+  - Timestamped section appended to the audit trail (unless dry-run).
+  - Manifest capturing success and target path.
 
-### INPUT
-```
-https://atomwise.com
-```
+## Common Behaviours
+- **Structured logging**: Every script prints `[STATE] message` lines and mirrors them to JSON with timestamps, state, level, details, and optional hints.
+- **Manifests**: Default manifests are written alongside session logs (e.g., `validate_and_save_result.json`). Use `--manifest` to point to a custom location.
+- **Bootstrap**: No manual `source` or `uv` activation required; the scripts invoke `ensure_module_venv` internally.
+- **Exit codes**: `0` on success; non-zero when validation fails or all operations were rejected.
 
-### WHAT IT DOES
-1. **MAKES ACTUAL HTTP REQUEST** to the URL
-2. **CHECKS** status code (must be 200/301/302)
-3. **EXTRACTS** page title as proof it loaded
-4. **MEASURES** response time
-5. **VALIDATES** SSL certificate
-
-### OUTPUT
-```json
-{
-  "url": "https://atomwise.com",
-  "valid": true,
-  "status_code": 200,
-  "title": "Atomwise - AI for Drug Discovery",
-  "ssl_valid": true,
-  "response_time_ms": 234,
-  "error": null
-}
-```
-
----
-
-## 3. `verify_source.py` - SOURCE VERIFICATION
-
-### INPUT
-```json
-{
-  "company_url": "https://atomwise.com",
-  "source_url": "https://github.com/awesome-ai-drug-discovery",
-  "company_name": "Atomwise"
-}
-```
-
-### WHAT IT DOES
-1. **FETCHES** the source URL
-2. **SEARCHES** for company name in source
-3. **SEARCHES** for company URL in source
-4. **EXTRACTS** the exact line/context where found
-5. **RETURNS** proof of where it was found
-
-### OUTPUT
-```json
-{
-  "found": true,
-  "source_valid": true,
-  "company_mentioned": true,
-  "url_mentioned": true,
-  "context": "- [Atomwise](https://atomwise.com) - AI-powered drug discovery",
-  "line_number": 47,
-  "confidence": 0.95
-}
-```
-
----
-
-## 4. `extract_truth.py` - REAL DATA EXTRACTION
-
-### INPUT
-```
-https://atomwise.com
-```
-
-### WHAT IT DOES
-1. **FETCHES** the company website
-2. **EXTRACTS** actual company name from site
-3. **FINDS** real description from meta tags
-4. **SEARCHES** for employee count
-5. **LOCATES** headquarters location
-6. **IDENTIFIES** actual offerings
-7. **RETURNS** only what was FOUND, not guessed
-
-### OUTPUT
-```json
-{
-  "extracted_name": "Atomwise Inc.",
-  "extracted_description": "AI-powered drug discovery and molecular design",
-  "found_employee_count": "51-200",
-  "found_location": "San Francisco, CA",
-  "found_founded": "2012",
-  "meta_description": "Atomwise uses AI for structure-based drug discovery",
-  "page_title": "Atomwise - AI for Drug Discovery",
-  "evidence": {
-    "employee_source": "footer text: '200+ employees'",
-    "location_source": "about page: 'Headquarters: San Francisco'",
-    "description_source": "meta description tag"
-  }
-}
-```
-
----
-
-## 5. `check_duplicate.py` - DUPLICATE CHECK
-
-### INPUT
-```json
-{
-  "url": "https://atomwise.com",
-  "name": "Atomwise"
-}
-```
-
-### WHAT IT DOES
-1. **READS** existing CSV files
-2. **CHECKS** if URL already exists
-3. **CHECKS** if company name exists
-4. **CHECKS** if redirect URL matches existing
-
-### OUTPUT
-```json
-{
-  "is_duplicate": false,
-  "existing_entry": null,
-  "similar_names": ["Atomwise"],
-  "same_domain": false
-}
-```
-
----
-
-## 6. `commit_verified.py` - FINAL WRITE
-
-### INPUT (only from pipeline, not from Claude)
-```json
-{
-  "verified_data": {
-    "vendor_name": "Atomwise",
-    "website_url": "https://atomwise.com",
-    "segment_code": "vertical_industry_platforms",
-    "primary_offering": "AI-powered drug discovery",
-    "hq_region": "na",
-    "employee_band": "50_199"
-  },
-  "verification_proof": {
-    "url_check": "passed",
-    "source_check": "passed",
-    "duplicate_check": "passed",
-    "extraction": "completed"
-  },
-  "audit_trail": {
-    "timestamp": "2024-01-01T10:30:00Z",
-    "source_url": "https://github.com/awesome-ai",
-    "checks_performed": 15,
-    "checks_passed": 15
-  }
-}
-```
-
-### WHAT IT DOES
-1. **VALIDATES** all required fields present
-2. **CONFIRMS** all checks passed
-3. **WRITES** to appropriate CSV
-4. **CREATES** audit log entry
-5. **RETURNS** confirmation
-
-### OUTPUT
-```
-✓ Added to: data/vertical_industry_platforms.csv
-✓ Audit log: audit/2024-01-01-atomwise.json
-✓ Entry #127: Atomwise
-```
-
----
-
-## HOW THEY CHAIN TOGETHER
-
-```bash
-# Claude runs:
-echo "Atomwise|https://atomwise.com|https://github.com/awesome-ai" | python add_company.py
-
-# add_company.py internally calls:
-url_valid = verify_url.py(url)
-if not url_valid:
-    EXIT WITH ERROR
-
-source_valid = verify_source.py(url, source)
-if not source_valid:
-    EXIT WITH ERROR
-
-real_data = extract_truth.py(url)
-if not real_data:
-    EXIT WITH ERROR
-
-is_duplicate = check_duplicate.py(url, name)
-if is_duplicate:
-    EXIT WITH ERROR
-
-# Only if ALL pass:
-commit_verified.py(all_verified_data)
-```
-
-## KEY ENFORCEMENT MECHANISMS
-
-1. **Scripts call each other** - Claude can't skip steps
-2. **Each script exits on failure** - Chain breaks if any check fails
-3. **Real HTTP requests** - Not using Claude's memory
-4. **Evidence required** - Must show WHERE data came from
-5. **Audit logs** - Every attempt is logged
-6. **No direct CSV access** - Only commit_verified.py can write
-
-## WHAT CLAUDE CANNOT DO
-
-- ❌ Call commit_verified.py directly (requires verification proof)
-- ❌ Skip verification steps
-- ❌ Provide fake verification proof (scripts check independently)
-- ❌ Add without source
-- ❌ Add duplicates
-- ❌ Make up data (extract_truth.py gets real data)
+Use these entry points for ALL modifications—direct edits to CSV/JSON datasets bypass guardrails and should be avoided.

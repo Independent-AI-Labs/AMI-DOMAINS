@@ -1,164 +1,58 @@
-# Mechanical Implementation - How Claude Actually Uses This
+# Mechanical Implementation – How the Toolkit Enforces Behaviour
 
-## THE MECHANICAL PROBLEM
-Claude cannot directly edit CSVs anymore. Claude must go through scripts that verify everything.
+Claude (and any automation) must route all research actions through the provided scripts. These entry points encapsulate validation, logging, manifests, and venv bootstrapping—direct file edits are blocked by process, policy, and review.
 
-## MECHANICAL WORKFLOW
+## Authorised Entry Points
+| Action | Required Script |
+| --- | --- |
+| Capture URLs | `python scripts/add_link.py --subdir <focus>` |
+| Validate structured data | `python scripts/validate_and_save.py --subdir <focus>` |
+| Download artefacts | `python scripts/download_file.py --subdir <focus>` |
+| Propose schema changes | `python scripts/propose_schema.py --name <schema>` |
+| Append audit commentary | `python scripts/add_audit_note.py --title "..."` |
 
-### Option 1: Pipe Chain (Claude's Terminal Commands)
-```bash
-# Claude finds a company and wants to add it
-echo "Company: Atomwise
-URL: https://atomwise.com
-Source: https://github.com/awesome-drug-discovery
-Description: AI drug discovery" | python scripts/add_company.py
+Each script ensures the marketing module venv is active (`ensure_module_venv`), prints clear `[STATE]` messages, writes JSON logs, and exits non-zero on failure so orchestrators can react immediately.
 
-# Script automatically chains internally:
-# → verify_exists.py checks URL
-# → verify_in_source.py checks source
-# → If ALL pass: writes to CSV
-# → If ANY fail: returns error, nothing written
-```
+## What Actually Happens Under the Hood
 
-### Option 2: Structured JSON Input
-```bash
-# Claude provides JSON
-cat << 'EOF' | python scripts/add_company.py
-{
-  "company": "Atomwise",
-  "url": "https://atomwise.com",
-  "source": "https://github.com/awesome-drug-discovery",
-  "description": "AI drug discovery",
-  "segment": "vertical_industry_platforms"
-}
-EOF
-```
+### Example: Adding a Company Record
+1. Claude prepares JSON representing the company.
+2. Runs `validate_and_save.py --dry-run` to surface schema and duplicate issues.
+3. The script:
+   - Loads the relevant schema from `schemas/`.
+   - Validates required fields, enums, string lengths, etc.
+   - Performs URL verification with retry/backoff and optional rate limiting.
+   - Checks `vendor_name` and `website_url` clashes inside the chosen subdirectory.
+4. If any errors exist, the run aborts with exit code `1`; warnings require a conscious `--force` re-run.
+5. On success, the script writes the JSON model, emits a manifest, and records the workflow in `logs/<subdir>/`.
 
-### Option 3: Batch Processing
-```bash
-# Claude provides multiple companies at once
-cat << 'EOF' | python scripts/batch_add.py
-Atomwise,https://atomwise.com,https://github.com/awesome-drug-discovery
-BenevolentAI,https://benevolent.ai,https://github.com/awesome-drug-discovery
-Recursion,https://recursion.com,https://techcrunch.com/ai-companies
-EOF
+### Example: Capturing Links
+- `add_link.py` ingests URLs (plain or CSV), verifies them (HEAD/GET), deduplicates against existing registry entries, and appends to `verified_links.csv` in append-only mode.
+- Rejected URLs—including the reason—land in `rejected_links.csv` for later manual review.
 
-# Output:
-# [1/3] Atomwise: ✓ VERIFIED
-# [2/3] BenevolentAI: ✓ VERIFIED
-# [3/3] Recursion: ✗ FAILED - Not found in source
-#
-# Added: 2 companies
-# Failed: 1 company
-```
+### Example: Audit Notes
+- `add_audit_note.py` wraps Markdown in a timestamped section and appends it to `requirements-and-schemas/requirements/audit-trail.md`, ensuring the immutable initial requirements stay untouched while decisions remain traceable.
 
-## ENFORCEMENT MECHANISM
+## Enforcement Mechanics
+1. **Script-only mutations** – Data directories (`links-and-sources`, `data-models`, `downloads`) are modified exclusively by the scripts. Direct edits show up in review and violate policy.
+2. **Structured telemetry** – `logs/<subdir>/latest.log.json` reflects the most recent run; JSONL histories make investigations reproducible.
+3. **Manifests for orchestration** – Each run produces a concise `*_result.json` summarising status, warnings, outputs, and whether `--force` or `--dry-run` was used.
+4. **No silent failures** – Any failed verification exits non-zero; orchestrators can halt pipelines immediately.
+5. **Audit integrity** – Only Markdown append operations are allowed; the canonical `initial-requirements.md` remains immutable by convention and review.
 
-### 1. File System Permissions (if possible)
-```bash
-# Make CSVs read-only for Claude
-chmod 444 data/*.csv
+## Prohibited Shortcuts (and Approved Alternatives)
+| Forbidden | Why | Approved Path |
+| --- | --- | --- |
+| `echo ... >> verified_links.csv` | Skips URL verification & logging | Use `add_link.py --dry-run`, then rerun without `--dry-run`. |
+| Editing JSON models manually | Bypasses schema enforcement | Pipe JSON through `validate_and_save.py`. |
+| Curl + `mv` for downloads | No headers, no logging | Run `download_file.py` with appropriate flags. |
+| Editing requirements directly | Breaks immutable audit baseline | Append context with `add_audit_note.py`. |
+| Dropping new schema file manually | No modelling validation | Pipe proposal into `propose_schema.py`. |
 
-# Only scripts can write (through sudo or special user)
-# Scripts have write permission, Claude doesn't
-```
+## Feedback Signals
+- ✔ Success: `[OK] Saved model to ...`, `[RESULT] Schema ready (...)` etc.
+- ⚠ Warnings: `[WARN] Recommended field missing: ...` – rerun with `--force` only when intentional.
+- ✖ Errors: `[ERROR] website_url: URL does not exist or is not accessible` – fix inputs before proceeding.
+- 🛈 Logs: Inspect `logs/<subdir>/latest.log.json` for machine-readable states; manifests summarise final status.
 
-### 2. Git Hooks (more realistic)
-```bash
-# Pre-commit hook that checks for direct CSV edits
-# Rejects commits that modify CSVs without audit log
-```
-
-### 3. Audit Log Requirement
-```bash
-# Every CSV modification must have corresponding log entry
-# audit/2024-01-01-atomwise.json contains:
-{
-  "company": "Atomwise",
-  "added_by": "add_company.py",
-  "timestamp": "2024-01-01T10:30:00Z",
-  "verification": {
-    "url_check": "passed - 200 OK",
-    "source_check": "passed - found at line 47",
-    "ssl_valid": true
-  }
-}
-```
-
-## CLAUDE'S ACTUAL WORKFLOW
-
-### Step 1: Claude searches for companies
-```bash
-# Claude uses browser or curl to find lists
-curl -s https://github.com/awesome-drug-discovery | grep -i "http"
-```
-
-### Step 2: Claude attempts to add
-```bash
-# Claude CANNOT do this anymore:
-echo "Atomwise,..." >> data/vertical_industry_platforms.csv  # ✗ FORBIDDEN
-
-# Claude MUST do this:
-python scripts/add_company.py --company "Atomwise" \
-  --url "https://atomwise.com" \
-  --source "https://github.com/awesome-drug-discovery"
-```
-
-### Step 3: Script validates EVERYTHING
-```python
-# Inside add_company.py:
-def add_company(company, url, source):
-    # 1. Verify URL exists
-    if not verify_url_exists(url):
-        return "ERROR: URL returned 404"
-
-    # 2. Verify source contains company
-    if not verify_in_source(url, source):
-        return "ERROR: Company not found in source"
-
-    # 3. Only if ALL checks pass
-    append_to_csv(company_data)
-    create_audit_log(company_data)
-    return "SUCCESS: Company added"
-```
-
-## FEEDBACK TO CLAUDE
-
-### Clear Success
-```
-$ python scripts/add_company.py --company "Atomwise" --url "https://atomwise.com"
-[VERIFY] Checking https://atomwise.com... ✓ 200 OK
-[SOURCE] Checking source... ✓ Found "Atomwise"
-[ADDED] Atomwise → vertical_industry_platforms.csv
-```
-
-### Clear Failure
-```
-$ python scripts/add_company.py --company "FakeCompany" --url "https://fakecompany.ai"
-[VERIFY] Checking https://fakecompany.ai... ✗ 404 NOT FOUND
-[ERROR] Cannot add company with non-existent URL
-```
-
-## THE KEY MECHANICAL ENFORCEMENT
-
-1. **Scripts are the ONLY way to modify CSVs**
-2. **Scripts verify BEFORE writing**
-3. **Failed verifications produce clear errors**
-4. **Success requires ALL checks to pass**
-5. **Audit log provides accountability**
-
-## What This Prevents
-
-- ❌ Claude adding companies from memory
-- ❌ Claude making up URLs
-- ❌ Claude claiming false sources
-- ❌ Claude bulk adding without verification
-- ❌ Claude editing CSVs directly
-
-## What This Enforces
-
-- ✓ Every URL is verified as real
-- ✓ Every source is checked
-- ✓ Every addition is logged
-- ✓ Only verified data enters dataset
-- ✓ Complete traceability
+Stay within the scripted lanes to guarantee high-quality, auditable research outputs.
