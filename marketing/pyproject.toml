@@ -37,6 +37,8 @@ dev = [
 validate-company = "marketing.scripts.validate_and_save:main"
 add-links = "marketing.scripts.add_link:main"
 download-file = "marketing.scripts.download_file:main"
+propose-schema = "marketing.scripts.propose_schema:main"
+add-audit-note = "marketing.scripts.add_audit_note:main"
 
 [build-system]
 requires = ["setuptools>=69", "wheel"]
