@@ -1,104 +1,36 @@
-# Cloudscraper - How It Works
+# Cloudscraper Usage in the Marketing Toolkit
 
-## What is it?
-Cloudscraper is a Python module designed to bypass Cloudflare's anti-bot protection. It's **FREE** and open-source (MIT License).
+Cloudscraper ships with the marketing module to make HTTP requests look like a real browser when necessary. The primary consumer is `download_file.py`, which first tries Cloudscraper before falling back to plain `requests` so we can reach Cloudflare-protected assets without manual intervention.
 
-## How it works
+## Why Cloudscraper?
+- Cloudflare and similar providers often gate content behind lightweight JavaScript challenges.
+- Standard `requests` fails (403/503) because it lacks browser fingerprints and JS execution.
+- Cloudscraper emulates Chrome TLS and UA fingerprints, solving those challenges in pure Python.
 
-### The Cloudflare Challenge
-1. When you visit a Cloudflare-protected site, you get a JavaScript challenge
-2. The challenge requires executing JavaScript to prove you're a "real" browser
-3. Regular Python requests can't execute JavaScript = gets blocked
-
-### What Cloudscraper Does
+## Download Flow
 ```python
-# Regular requests - FAILS on Cloudflare
-response = requests.get("https://cloudflare-protected-site.com")
-# Returns: 403 Forbidden or 503 Challenge page
-
-# Cloudscraper - WORKS
-scraper = cloudscraper.create_scraper()
-response = scraper.get("https://cloudflare-protected-site.com")
-# Returns: Actual website content
+# inside download_file.py
+try:
+    response = cloudscraper.create_scraper(...).get(url, stream=True, timeout=timeout)
+except Exception:
+    session = requests.Session()
+    session.headers.update(stealth_headers)
+    response = session.get(url, stream=True, timeout=timeout)
 ```
-
-### Technical Implementation
-1. **JavaScript Engine**: Uses a JS interpreter to solve challenges
-2. **Browser Fingerprinting**: Mimics real Chrome/Firefox fingerprints
-3. **TLS Fingerprinting**: Matches real browser TLS signatures
-4. **User-Agent Rotation**: Uses realistic browser user-agents
-5. **Cookie Handling**: Manages cf_clearance cookies
+- The script logs whether the fallback was engaged and captures the final status code.
+- Allowed status codes and headers live in `requirements-and-schemas/schemas/download.yaml` so we can tune behaviour without editing code.
 
 ## Limitations
+- CAPTCHA challenges still require a human/browser.
+- Respect website Terms of Service and robots.txt; Cloudscraper is a power tool, not a carte blanche.
+- Heavy rate limiting may still block repeated requests—use the `--requests-per-minute` flag to throttle politely.
 
-### What it CAN bypass:
-- Basic Cloudflare JS challenges (the "Checking your browser" page)
-- Some rate limiting
-- Basic bot detection
+## Alternatives & Escalation Paths
+- If Cloudscraper fails, consider orchestrated Playwright/Selenium runs for one-off captures.
+- For truly locked-down resources, coordinate with the research lead before proceeding.
 
-### What it CANNOT bypass:
-- CAPTCHA challenges (requires human interaction)
-- Advanced Enterprise Cloudflare rules
-- Sites with additional bot protection (PerimeterX, DataDome, etc.)
-- Cloudflare Workers-based custom challenges
+## Installation Notes
+- Bundled via `pyproject.toml`; no extra setup required when running scripts.
+- Pure Python dependency (~2–5 MB). The marketing scripts automatically activate the venv where it is installed.
 
-## Alternatives
-
-### Free Options:
-1. **undetected-chromedriver** - Controls real Chrome browser (heavier but more reliable)
-2. **playwright** - Microsoft's browser automation (like Puppeteer)
-3. **selenium-stealth** - Selenium with stealth patches
-
-### How Our Scripts Handle It:
-```python
-try:
-    # Try cloudscraper first
-    response = self.scraper.get(url)
-except:
-    # Fall back to regular requests
-    response = requests.get(url, headers=browser_headers)
-```
-
-## Is It Legal?
-- The tool itself is legal
-- Usage depends on website Terms of Service
-- Respecting robots.txt is recommended
-- Should not be used for:
-  - DDoS or overwhelming servers
-  - Scraping personal data
-  - Violating website ToS
-
-## Should You Use It?
-
-### YES if:
-- Researching public company information
-- Sites block Python requests unnecessarily
-- You're respecting rate limits
-- You have permission or it's public data
-
-### NO if:
-- Site explicitly prohibits scraping
-- Bypassing paywalls
-- Scraping sensitive/personal data
-- Creating excessive server load
-
-## Installation Impact
-```bash
-# Size: ~2-5 MB
-# Dependencies: requests, pyparsing
-# No system-level changes
-# Pure Python - no compiled binaries
-pip install cloudscraper
-```
-
-## For Our Research Scripts
-
-Without cloudscraper:
-- Scripts work fine for 90% of sites
-- Will fail on Cloudflare-protected sites
-- Can use browser manually for those sites
-
-With cloudscraper:
-- Can automatically verify more URLs
-- Less manual intervention needed
-- Still fails on CAPTCHA sites
+Use Cloudscraper via the provided scripts—avoid ad-hoc integration so logging and manifests remain consistent.
