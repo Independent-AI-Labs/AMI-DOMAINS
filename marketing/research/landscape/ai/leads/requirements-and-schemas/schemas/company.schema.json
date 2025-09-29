@@ -1,0 +1,70 @@
+{
+  "name": "AI Company Schema",
+  "version": "1.0.0",
+  "required": ["vendor_name", "website_url", "segment_code", "primary_offering"],
+  "fields": {
+    "vendor_name": {
+      "type": "string",
+      "min_length": 1,
+      "max_length": 200,
+      "description": "Company name as shown on website"
+    },
+    "website_url": {
+      "type": "url",
+      "pattern": "^https?://",
+      "description": "Primary company website"
+    },
+    "segment_code": {
+      "type": "enum",
+      "values": [
+        "foundation_models",
+        "agentic_automation",
+        "enterprise_suites",
+        "vertical_industry",
+        "functional_specialists",
+        "ecosystem_enablers",
+        "edge_embedded",
+        "open_source",
+        "hyperscalers"
+      ],
+      "description": "Market segment classification"
+    },
+    "primary_offering": {
+      "type": "string",
+      "max_length": 500,
+      "description": "Main product or service"
+    },
+    "description": {
+      "type": "string",
+      "max_length": 1000,
+      "description": "Brief company description"
+    },
+    "hq_region": {
+      "type": "enum",
+      "values": ["na", "emea", "apac", "latam"],
+      "required": false,
+      "description": "Headquarters region"
+    },
+    "employee_band": {
+      "type": "enum",
+      "values": ["1_9", "10_49", "50_199", "200_499", "500_999", "1k_4k", "5k_9k", "10k_plus"],
+      "required": false,
+      "description": "Employee count range"
+    },
+    "founded_year": {
+      "type": "integer",
+      "min": 1950,
+      "max": 2025,
+      "required": false,
+      "description": "Year company was founded"
+    },
+    "source_url": {
+      "type": "url",
+      "description": "Where this data was found"
+    },
+    "date_verified": {
+      "type": "date",
+      "description": "When URL was last verified"
+    }
+  }
+}
