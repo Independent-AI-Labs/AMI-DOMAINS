@@ -67,12 +67,12 @@ def setup_venv(module_root: Path) -> bool:
 def create_directories(module_root: Path) -> None:
     """Create required directory structure for research."""
     dirs = [
-        "research/landscape/ai/leads/links",
-        "research/landscape/ai/leads/models",
-        "research/landscape/ai/leads/data",
-        "research/landscape/ai/leads/logs",
-        "research/landscape/ai/leads/downloads",
-        "research/landscape/ai/leads/schemas",
+        "research/ai-enablers/links-and-sources/validated",
+        "research/ai-enablers/data-models/validated",
+        "research/ai-enablers/logs",
+        "research/ai-enablers/downloads",
+        "research/ai-enablers/requirements-and-schemas/requirements",
+        "research/ai-enablers/requirements-and-schemas/schemas",
     ]
 
     for dir_path in dirs:

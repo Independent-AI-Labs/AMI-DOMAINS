@@ -1,4 +1,4 @@
-# AI/ML Competitive Landscape Research Requirements
+# AI Enablers Research Requirements
 
 ## Objective
 Catalog ALL AI/ML companies with market presence to create comprehensive competitive landscape.
