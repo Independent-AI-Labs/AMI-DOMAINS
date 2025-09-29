@@ -44,11 +44,7 @@ def setup_venv(module_root: Path) -> bool:
     if not venv_dir.exists():
         logger.info("Creating virtual environment with Python 3.12...")
         result = subprocess.run(
-            ["uv", "venv", "--python", "3.12"],
-            cwd=module_root,
-            capture_output=True,
-            text=True,
-            check=False
+            ["uv", "venv", "--python", "3.12"], cwd=module_root, capture_output=True, text=True, check=False
         )
         if result.returncode != 0:
             logger.error("Failed to create virtual environment")
@@ -57,13 +53,7 @@ def setup_venv(module_root: Path) -> bool:
 
     # Sync dependencies (including dev)
     logger.info("Installing dependencies (including cloudscraper for anti-bot)...")
-    result = subprocess.run(
-        ["uv", "sync", "--dev"],
-        cwd=module_root,
-        capture_output=True,
-        text=True,
-        check=False
-    )
+    result = subprocess.run(["uv", "sync", "--dev"], cwd=module_root, capture_output=True, text=True, check=False)
 
     if result.returncode != 0:
         logger.error("Failed to sync dependencies")
@@ -137,12 +127,7 @@ except ImportError as e:
     test_file.write_text(test_script)
 
     # Run test
-    result = subprocess.run(
-        ["uv", "run", "python", "test_imports.py"],
-        cwd=module_root,
-        capture_output=True,
-        text=True
-    )
+    result = subprocess.run(["uv", "run", "python", "test_imports.py"], cwd=module_root, capture_output=True, text=True)
 
     # Clean up
     test_file.unlink()
@@ -158,10 +143,7 @@ except ImportError as e:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Set up marketing module environment")
     parser.add_argument(
-        "--module-dir",
-        type=Path,
-        default=Path(__file__).resolve().parent,
-        help="Marketing module directory"
+        "--module-dir", type=Path, default=Path(__file__).resolve().parent, help="Marketing module directory"
     )
     parser.add_argument("--skip-tests", action="store_true", help="Skip import tests")
     args = parser.parse_args()
