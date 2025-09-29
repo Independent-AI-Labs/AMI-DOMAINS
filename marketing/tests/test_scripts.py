@@ -33,6 +33,7 @@ link_module = load_script("add_link")
 download_module = load_script("download_file")
 schema_module = load_script("propose_schema")
 audit_module = load_script("add_audit_note")
+create_module = load_script("create_research")
 
 
 @pytest.fixture()
@@ -171,3 +172,51 @@ def test_add_audit_note_wrap(tmp_paths: validate_module.ModulePaths) -> None:
 
     contents = audit_file.read_text(encoding="utf-8")
     assert "Weekly Update" in contents
+
+
+def test_scaffold_dry_run_reports(tmp_path: Path) -> None:
+    module_root = tmp_path / "marketing"
+    options = create_module.ScaffoldOptions(
+        slug="ai-scouting",
+        title="AI Scouting",
+        requirements_body="## Objective\nTrack scouting opportunities",
+        dry_run=True,
+    )
+    scaffold = create_module.ResearchScaffold(
+        options,
+        module_root=module_root,
+        script_path=SCRIPTS_DIR / "create_research.py",
+    )
+
+    outcome = scaffold.run()
+
+    assert outcome.dry_run is True
+    assert outcome.created_directories[0] == module_root / "research" / "ai-scouting"
+    assert outcome.created_files == {}
+
+
+def test_scaffold_creates_full_structure(tmp_path: Path) -> None:
+    module_root = tmp_path / "marketing"
+    options = create_module.ScaffoldOptions(
+        slug="ai-security",
+        title="AI Security",
+        requirements_body="## Objective\nCatalogue AI security vendors",
+        dry_run=False,
+    )
+    scaffold = create_module.ResearchScaffold(
+        options,
+        module_root=module_root,
+        script_path=SCRIPTS_DIR / "create_research.py",
+    )
+
+    outcome = scaffold.run()
+
+    research_root = module_root / "research" / "ai-security"
+    req_path = research_root / "requirements-and-schemas" / "requirements" / "initial-requirements.md"
+    audit_path = research_root / "requirements-and-schemas" / "requirements" / "audit-trail.md"
+
+    assert outcome.dry_run is False
+    assert req_path.exists()
+    assert audit_path.exists()
+    contents = req_path.read_text(encoding="utf-8")
+    assert create_module.BROWSER_REMINDER in contents
