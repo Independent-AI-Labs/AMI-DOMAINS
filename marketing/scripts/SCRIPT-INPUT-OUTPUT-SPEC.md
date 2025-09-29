@@ -1,6 +1,6 @@
 # Script Input / Output Reference
 
-All scripts run from `domains/marketing/scripts/`, bootstrap the local venv automatically, print human-readable status lines, and emit JSONL logs plus optional manifests underneath `research/ai-enablers/logs/`.
+All scripts run from `domains/marketing/scripts/`, bootstrap the local venv automatically, print human-readable status lines, and emit JSONL logs plus optional manifests underneath `research/ai-enablers/logs/`. **Remember: only the Browser MCP tool is trusted for gathering content; feed scripts with data collected via that tool.**
 
 ## `validate_and_save.py`
 - **Purpose**: Validate structured company data and persist it to `data-models/validated/<subdir>/`.

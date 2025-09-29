@@ -9,7 +9,7 @@ Catalog ALL AI/ML companies with market presence to create comprehensive competi
 - Focus: Companies with actual market presence
 
 ## Research Process
-1. I browse the web using browser tool
+1. I browse the web using the Browser MCP tool **(the only trusted source of content)**
 2. I find companies and their information
 3. I submit findings to validation scripts
 4. Scripts verify URLs exist and data is valid

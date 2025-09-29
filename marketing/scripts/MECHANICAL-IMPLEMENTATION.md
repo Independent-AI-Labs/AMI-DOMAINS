@@ -1,6 +1,6 @@
 # Mechanical Implementation – How the Toolkit Enforces Behaviour
 
-Claude (and any automation) must route all research actions through the provided scripts. These entry points encapsulate validation, logging, manifests, and venv bootstrapping—direct file edits are blocked by process, policy, and review.
+All source material MUST be gathered via the Browser MCP tool; it is the only trusted conduit for content.
 
 ## Authorised Entry Points
 | Action | Required Script |
