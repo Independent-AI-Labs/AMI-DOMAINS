@@ -1,7 +1,7 @@
 # Code Quality Issues Report - Domains Module
 
-**Generated:** 2025-09-01  
-**Module:** /domains  
+**Generated:** 2025-09-01
+**Module:** /domains
 **Total Python Files:** 54 (46 source + 8 test files)
 
 ## Executive Summary
@@ -33,17 +33,17 @@ These prevent code from running and block type checking:
 
 #### File: `sda/_reference_code/tests/core/test_db_management_pdf.py:185`
 ```
-Line 185: ``` 
+Line 185: ```
 Line 186: (invalid markdown code block marker)
 ```
-**Impact:** Prevents mypy execution and may cause runtime failures  
+**Impact:** Prevents mypy execution and may cause runtime failures
 **Effort:** 5 minutes per file
 
 #### File: `sda/_reference_code/tests/ui/test_ui_file_explorer.py:159`
 ```
 Line 159: ``` (4 separate syntax errors)
 ```
-**Impact:** Test file cannot execute  
+**Impact:** Test file cannot execute
 **Effort:** 10 minutes
 
 ### 2. Bare Exception Handling (2 occurrences)
@@ -60,8 +60,8 @@ except:
     # Exception swallowing - violates CLAUDE.md instructions
 ```
 
-**Impact:** Hides errors, makes debugging impossible  
-**Effort:** 15 minutes per occurrence  
+**Impact:** Hides errors, makes debugging impossible
+**Effort:** 15 minutes per occurrence
 **Note:** Direct violation of CLAUDE.md: "NO FUCKING EXCEPTION SWALLOWING ALWAYS LOG THEM OR PROPAGATE"
 
 ---
@@ -79,7 +79,7 @@ except:
 - `sda/ui.py`: 15 print statements
 - `gemini_cli_wrapper.py`: 13 print statements
 
-**Impact:** Poor logging practices, difficult debugging  
+**Impact:** Poor logging practices, difficult debugging
 **Effort:** 2-5 minutes per statement (replace with proper logging)
 
 ### 2. Ruff Violations (3,169 total)
@@ -98,7 +98,7 @@ except:
 from typing import Dict, List, Any, Optional, Tuple  # Should use dict, list, tuple
 ```
 
-**Impact:** Inconsistent code style, potential runtime issues  
+**Impact:** Inconsistent code style, potential runtime issues
 **Effort:** Most are auto-fixable with `ruff check --fix`
 
 ### 3. Type Hints Missing (~200+ functions)
@@ -109,7 +109,7 @@ from typing import Dict, List, Any, Optional, Tuple  # Should use dict, list, tu
 - `mock_framework()`
 - `dashboard_ui_instance(mock_framework)`
 
-**Impact:** Reduced IDE support, potential runtime type errors  
+**Impact:** Reduced IDE support, potential runtime type errors
 **Effort:** 2-3 minutes per function signature
 
 ---
@@ -123,7 +123,7 @@ from typing import Dict, List, Any, Optional, Tuple  # Should use dict, list, tu
 # sda/_reference_code/sda/config.py:36
 PG_HOST = os.getenv("PG_HOST", "127.0.0.1")  # Should use env-only
 
-# sda/_reference_code/sda/config.py:43  
+# sda/_reference_code/sda/config.py:43
 DGRAPH_HOST = os.getenv("DGRAPH_HOST", "127.0.0.1")  # Should use env-only
 
 # sda/_reference_code/tests/test_api_endpoints.py:8
@@ -133,7 +133,7 @@ BASE_URL = "http://localhost:8000"  # Should be configurable
 DGRAPH_URL = "10.8.0.3:9080"  # Hardcoded IP
 ```
 
-**Impact:** Deployment flexibility issues  
+**Impact:** Deployment flexibility issues
 **Effort:** 5 minutes per occurrence
 
 ### 2. TODO/FIXME Comments (2 occurrences)
@@ -148,7 +148,7 @@ DGRAPH_URL = "10.8.0.3:9080"  # Hardcoded IP
 # TODO: Add logic here to embed the image using a vision model.
 ```
 
-**Impact:** Incomplete functionality  
+**Impact:** Incomplete functionality
 **Effort:** 30-60 minutes per TODO (depending on complexity)
 
 ---
@@ -164,7 +164,7 @@ DGRAPH_URL = "10.8.0.3:9080"  # Hardcoded IP
 
 #### `sda/_reference_code/tests/ui/test_ui_file_explorer.py`
 - **Syntax Errors:** 4 at line 159
-- **Ruff:** 20+ violations  
+- **Ruff:** 20+ violations
 - **Line Length:** 2 violations (>160 chars)
 
 #### `sda/_reference_code/dissect_pdf_example/local_server.py`
@@ -210,7 +210,7 @@ DGRAPH_URL = "10.8.0.3:9080"  # Hardcoded IP
 
 ## Python 3.12+ Compatibility Analysis
 
-**Status:** ✅ COMPATIBLE  
+**Status:** ✅ COMPATIBLE
 **Finding:** No Python 3.12+ exclusive syntax detected
 - No `match/case` statements found
 - No type alias statements (`type X = ...`)
@@ -283,7 +283,7 @@ tests/
 2. Replace bare `except:` with specific exception handling
 3. Run `ruff check --fix --unsafe-fixes` for auto-fixable issues
 
-### Phase 2 (Major - Next 2 Weeks)  
+### Phase 2 (Major - Next 2 Weeks)
 1. Replace all print statements with proper logging
 2. Add type hints to public APIs and main functions
 3. Fix remaining ruff violations manually

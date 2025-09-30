@@ -1,3 +1,10 @@
 [submodule "predict"]
 	path = predict
 	url = git@github.com:Independent-AI-Labs/AMI-PREDICT.git
+	branch = main
+	update = checkout
+[submodule "marketing"]
+	path = marketing
+	url = git@github.com:Independent-AI-Labs/AMI-MARKETING.git
+	branch = main
+	update = checkout
