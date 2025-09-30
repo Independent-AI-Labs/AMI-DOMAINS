@@ -87,15 +87,15 @@ domain/
 ```python
 class DomainAnalyzer:
     """Base class for domain-specific analyzers"""
-    
+
     async def analyze(self, data: Any) -> AnalysisResult:
         """Perform domain-specific analysis"""
         pass
-    
+
     async def generate_insights(self, results: AnalysisResult) -> List[Insight]:
         """Generate actionable insights"""
         pass
-    
+
     async def create_recommendations(self, insights: List[Insight]) -> List[Recommendation]:
         """Create improvement recommendations"""
         pass
@@ -105,19 +105,19 @@ class DomainAnalyzer:
 ```python
 class SoftwareAnalyzer(DomainAnalyzer):
     """Software development analytics engine"""
-    
+
     async def analyze_codebase(self, repo_path: str) -> CodebaseAnalysis:
         """Comprehensive codebase analysis"""
         pass
-    
+
     async def analyze_development_process(self, project_data: dict) -> ProcessAnalysis:
         """Development process analysis"""
         pass
-    
+
     async def predict_issues(self, historical_data: dict) -> List[PredictedIssue]:
         """Predictive analysis for potential issues"""
         pass
-    
+
     async def optimize_workflow(self, current_workflow: dict) -> WorkflowOptimization:
         """Workflow optimization recommendations"""
         pass
@@ -154,15 +154,15 @@ class SoftwareAnalyzer(DomainAnalyzer):
 ```python
 class DataCollector:
     """Multi-source data collection"""
-    
+
     async def collect_from_vcs(self, repo_url: str) -> VCSData:
         """Collect version control data"""
         pass
-    
+
     async def collect_from_ci(self, ci_url: str) -> CIData:
         """Collect CI/CD pipeline data"""
         pass
-    
+
     async def collect_from_pm(self, pm_api: str) -> PMData:
         """Collect project management data"""
         pass
@@ -172,15 +172,15 @@ class DataCollector:
 ```python
 class DataProcessor:
     """Process and transform collected data"""
-    
+
     def normalize_data(self, raw_data: dict) -> NormalizedData:
         """Normalize data from different sources"""
         pass
-    
+
     def calculate_metrics(self, normalized_data: NormalizedData) -> Metrics:
         """Calculate domain-specific metrics"""
         pass
-    
+
     def detect_patterns(self, metrics: Metrics) -> List[Pattern]:
         """Identify patterns and trends"""
         pass
@@ -190,15 +190,15 @@ class DataProcessor:
 ```python
 class InsightEngine:
     """Generate actionable insights"""
-    
+
     def analyze_trends(self, historical_data: dict) -> List[Trend]:
         """Identify significant trends"""
         pass
-    
+
     def detect_anomalies(self, metrics: Metrics) -> List[Anomaly]:
         """Detect metric anomalies"""
         pass
-    
+
     def generate_predictions(self, patterns: List[Pattern]) -> List[Prediction]:
         """Generate predictive insights"""
         pass
