@@ -23,6 +23,12 @@ repos:
         require_serial: true
         stages: [ pre-commit ]
         pass_filenames: false
+      # - id: no-lint-suppressions
+      #   name: no-lint-suppressions
+      #   entry: bash -c "cd .. && .venv/bin/python scripts/list_noqas.py domains"
+      #   language: system
+      #   pass_filenames: false
+      #   stages: [ pre-commit ]
 
   - repo: local
     hooks:
