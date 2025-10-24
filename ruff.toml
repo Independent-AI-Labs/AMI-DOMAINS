@@ -1,0 +1,11 @@
+# Domains module ruff configuration
+# Extends base ruff.toml and excludes submodules
+
+extend = "../base/ruff.toml"
+
+# Exclude submodule directories from linting
+exclude = [
+    "marketing",
+    "risk",
+    "sda",
+]
