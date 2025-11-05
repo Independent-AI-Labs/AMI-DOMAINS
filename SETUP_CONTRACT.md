@@ -1,4 +1,4 @@
-# Domains Module — Setup Contract
+# Domains Module - Setup Contract
 
 Status
 - `module_setup.py` delegates to Base `AMIModuleSetup` and provisions the module `.venv` using Python 3.12 (see `python.ver`).
